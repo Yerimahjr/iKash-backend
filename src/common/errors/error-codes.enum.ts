@@ -6,9 +6,11 @@
 export enum ErrorCode {
   // ── Auth / Wallet ──────────────────────────────────────────────────
   INVALID_WALLET = 'INVALID_WALLET',
-  MISSING_PUBLIC_KEY = 'MISSING_PUBLIC_KEY',
   UNAUTHORIZED_ACTION = 'UNAUTHORIZED_ACTION',
   KYC_REQUIRED = 'KYC_REQUIRED',
+  INVALID_CHALLENGE = 'INVALID_CHALLENGE',
+  INVALID_SIGNATURE = 'INVALID_SIGNATURE',
+  TOO_MANY_REQUESTS = 'TOO_MANY_REQUESTS',
 
   // ── User ────────────────────────────────────────────────────────────
   USER_NOT_FOUND = 'USER_NOT_FOUND',
@@ -23,6 +25,7 @@ export enum ErrorCode {
   // ── Order ────────────────────────────────────────────────────────────
   ORDER_NOT_FOUND = 'ORDER_NOT_FOUND',
   INVALID_ORDER_STATUS = 'INVALID_ORDER_STATUS',
+  ORDER_CANCELLATION_NOT_ALLOWED = 'ORDER_CANCELLATION_NOT_ALLOWED',
 
   // ── Escrow ───────────────────────────────────────────────────────────
   ESCROW_NOT_FOUND = 'ESCROW_NOT_FOUND',
@@ -39,6 +42,7 @@ export enum ErrorCode {
   PAYMENT_METHOD_NOT_FOUND = 'PAYMENT_METHOD_NOT_FOUND',
   PAYMENT_PROVIDER_NOT_FOUND = 'PAYMENT_PROVIDER_NOT_FOUND',
   MISSING_PAYMENT_PROVIDER = 'MISSING_PAYMENT_PROVIDER',
+  INVALID_ACCOUNT_IDENTIFIER = 'INVALID_ACCOUNT_IDENTIFIER',
 
   // ── Chat ─────────────────────────────────────────────────────────────
   CHAT_MESSAGE_NOT_FOUND = 'CHAT_MESSAGE_NOT_FOUND',

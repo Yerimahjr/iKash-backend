@@ -6,19 +6,18 @@ WORKDIR /usr/src/app
 # Instalar pnpm globalmente
 RUN npm install -g pnpm
 
-# Copiar metadatos de dependencias
+# Copiar metadatos de dependencias y esquema prisma para el postinstall
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY tsconfig*.json nest-cli.json ./
+COPY prisma ./prisma
 
-# Instalar TODAS las dependencias
+# Instalar TODAS las dependencias (ejecuta prisma generate en el postinstall)
 RUN pnpm install
 
-# Copiar esquema de Prisma y código fuente
-COPY prisma ./prisma
+# Copiar código fuente
 COPY src ./src
 
-# Generar cliente de Prisma y compilar NestJS
-RUN pnpm prisma generate
+# Compilar NestJS
 RUN pnpm run build
 
 # --- ETAPA DE PRODUCCIÓN ---
@@ -31,17 +30,15 @@ ENV NODE_ENV=production
 # Instalar pnpm globalmente
 RUN npm install -g pnpm
 
+# Copiar metadatos y prisma para el postinstall
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=builder /usr/src/app/prisma ./prisma
 
 # Instalar solo dependencias de producción de forma limpia
 RUN pnpm install --prod
 
-# Copiar la estructura de Prisma y el build compilado
-COPY --from=builder /usr/src/app/prisma ./prisma
+# Copiar el build compilado
 COPY --from=builder /usr/src/app/dist ./dist
-
-# Volver a generar el cliente dentro del node_modules limpio de producci├│n
-RUN pnpm prisma generate
 
 # Cloud Run inyecta el puerto 8080 automáticamente
 EXPOSE 8080

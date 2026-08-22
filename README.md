@@ -56,6 +56,77 @@ $ npm run test:e2e
 # test coverage
 $ npm run test:cov
 ```
+## Audit Logging
+
+The platform maintains a centralized, immutable audit trail for critical
+security-relevant actions via `src/modules/audit-log`.
+
+### Usage
+
+Inject `AuditLogService` into any module that performs a critical action and
+call `create()` (or `createOrThrow()` for operations where an unaudited
+action is unacceptable):
+
+```typescript
+await auditLogService.create({
+  userId,
+  action: AuditAction.ESCROW_RELEASED,
+  resourceType: 'Escrow',
+  resourceId: escrow.escrowId,
+  result: AuditResult.SUCCESS,
+  ipAddress,
+  userAgent,
+  metadata: { transactionHash },
+});
+```
+
+`create()` never throws — a failed audit write is logged via `Logger.error`
+(including the action name and correlation id) and swallowed, so a broken
+audit sink alone cannot fail an otherwise successful operation. Use
+`createOrThrow()` at call sites where a missing audit record is unacceptable
+(the caller is then expected to abort/roll back on failure).
+
+### Action names
+
+All action names are centralized in `AuditAction`
+(`src/modules/audit-log/enums/audit-action.enum.ts`) — auth, payment
+methods, offers, orders, escrow, disputes, KYC, and admin actions. Add new
+actions there rather than using free-form strings, so audit queries stay
+reliable.
+
+### Currently integrated flows
+
+| Flow | Actions | Location |
+|---|---|---|
+| Auth | `USER_LOGIN_SUCCESS`, `USER_LOGIN_FAILURE` | `src/modules/auth` |
+| KYC | `KYC_STATUS_UPDATED` | `src/modules/kyc` |
+| Escrow | `ESCROW_CREATED`, `ESCROW_FUNDED`, `ESCROW_RELEASED` | `src/modules/escrow` |
+| Payment methods | `PAYMENT_METHOD_CREATED/UPDATED/DELETED` | `src/modules/payment-methods` |
+| Offers | `OFFER_CREATED/UPDATED/CANCELLED` | `src/modules/offer` |
+| Orders | `ORDER_CREATED/CANCELLED/EXPIRED` | `src/modules/order` |
+
+### Known gaps (no corresponding code path yet)
+
+The following `AuditAction` values are defined and ready to use, but this
+codebase has no existing flow to hook them into yet:
+
+- `ESCROW_REFUNDED` — no refund entrypoint currently exists; `EscrowService`
+  only has `open`/`initialize`/`fund`/`release`/`syncTransaction`, and
+  `syncTransaction`'s `EscrowAction` enum has no `REFUND` case.
+- `DISPUTE_OPENED` / `DISPUTE_RESOLVED` — there is no `dispute` module in
+  this codebase yet.
+- `ADMIN_ACTION_EXECUTED` — there is no admin module or admin-gated
+  entrypoint in this codebase yet.
+
+When those flows are built, wire `AuditLogService` into them the same way
+as the flows listed above.
+
+### Sensitive data
+
+`metadata` must be an explicitly-selected allowlist of fields — never a raw
+request body or full entity dump. Never pass wallet private keys, JWTs,
+webhook secrets, passwords, full bank account details, or raw identity
+documents into any `AuditLogService` call.
 
 ## Deployment
 

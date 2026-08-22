@@ -1,7 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AppException, ErrorCode } from '../../common/errors';
 import { kyc_status } from '@prisma/client';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResult } from '../audit-log/enums/audit-action.enum';
+
+export interface VerifyWebhookSignatureOptions {
+  signatureV2?: string;
+  signatureV1?: string;
+  signatureSimple?: string;
+  timestamp?: string;
+  rawBody?: Buffer;
+  payload?: Record<string, unknown>;
+}
 
 interface DiditWebhookPayload {
   vendor_data?: string;
@@ -23,7 +36,118 @@ export class KycService {
   private readonly diditApiKey = process.env.DIDIT_API_KEY;
   private readonly diditWorkflowId = process.env.DIDIT_WORKFLOW_ID;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly auditLogService: AuditLogService,
+    private readonly configService?: ConfigService,
+  ) {}
+
+  /**
+   * Verifies the authenticity of incoming Didit webhook requests.
+   * Throws AppException with appropriate ErrorCode on verification failure.
+   */
+  verifyWebhookSignature(options: VerifyWebhookSignatureOptions): void {
+    const webhookSecret =
+      this.configService?.get<string>('DIDIT_WEBHOOK_SECRET') ||
+      process.env.DIDIT_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      this.logger.error('[WEBHOOK] DIDIT_WEBHOOK_SECRET is not configured');
+      throw new AppException(
+        ErrorCode.KYC_WEBHOOK_SECRET_MISSING,
+        'DIDIT_WEBHOOK_SECRET is not configured',
+      );
+    }
+
+    if (!options.rawBody) {
+      this.logger.error('[WEBHOOK] Missing raw HTTP body');
+      throw new AppException(
+        ErrorCode.KYC_WEBHOOK_MISSING_BODY,
+        'Missing raw HTTP body. Ensure { rawBody: true } is set in main.ts.',
+      );
+    }
+
+    // Optional timestamp tolerance check (prevent replay attacks if timestamp is present)
+    if (options.timestamp) {
+      const timestampNum = parseInt(options.timestamp, 10);
+      if (!isNaN(timestampNum)) {
+        const now = Date.now();
+        const timestampMs =
+          timestampNum < 1e11 ? timestampNum * 1000 : timestampNum;
+        const maxAgeMs = 5 * 60 * 1000; // 5 minutes
+        if (Math.abs(now - timestampMs) > maxAgeMs) {
+          this.logger.warn(
+            `[WEBHOOK] Failed verification attempt: Request timestamp expired or out of range. Timestamp=${options.timestamp}`,
+          );
+          throw new AppException(
+            ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE,
+            'Webhook request expired',
+          );
+        }
+      }
+    }
+
+    const sigToVerify = options.signatureV2 || options.signatureV1;
+    if (sigToVerify) {
+      const expectedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(options.rawBody)
+        .digest('hex');
+
+      if (!this.timingSafeEqual(sigToVerify.trim(), expectedSignature)) {
+        this.logger.warn(
+          `[WEBHOOK] Failed verification attempt: Signature mismatch (V1/V2).`,
+        );
+        throw new AppException(
+          ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE,
+          'Invalid webhook signature',
+        );
+      }
+      this.logger.log('[WEBHOOK] Signature verified ✅');
+    } else if (options.signatureSimple) {
+      const payloadObj = options.payload || {};
+      const sessionId = (payloadObj.session_id as string) || '';
+      const status = (payloadObj.status as string) || '';
+      const webhookType = (payloadObj.webhook_type as string) || '';
+      const simplePayload = `:${sessionId}:${status}:${webhookType}`;
+      const expectedSimple = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(simplePayload)
+        .digest('hex');
+
+      if (
+        !this.timingSafeEqual(options.signatureSimple.trim(), expectedSimple)
+      ) {
+        this.logger.warn(
+          '[WEBHOOK] Failed verification attempt: Simple signature mismatch.',
+        );
+        throw new AppException(
+          ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE,
+          'Invalid webhook signature',
+        );
+      }
+      this.logger.log('[WEBHOOK] Simple signature verified ✅');
+    } else {
+      this.logger.warn(
+        '[WEBHOOK] Failed verification attempt: No signature header found.',
+      );
+      throw new AppException(
+        ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE,
+        'Missing X-Signature header',
+      );
+    }
+  }
+
+  /**
+   * Performs a timing-safe string comparison to prevent timing attacks.
+   */
+  private timingSafeEqual(a: string, b: string): boolean {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const bufA = Buffer.from(a, 'utf8');
+    const bufB = Buffer.from(b, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  }
 
   async initializeSession(userId: string): Promise<{ sessionUrl: string }> {
     try {
@@ -135,19 +259,45 @@ export class KycService {
     else if (statusLower === 'in_progress') kycStatus = 'in_progress';
     else kycStatus = 'pending';
 
+    // Capture the pre-update status so the audit record shows the actual
+    // transition (previousStatus -> newStatus), not just the new value.
+    const existing = await this.prisma.appUser.findUnique({
+      where: { userId },
+      select: { kycStatus: true },
+    });
+    const previousStatus = existing?.kycStatus ?? null;
+
     try {
       const updatedUser = await this.prisma.appUser.update({
         where: { userId },
         data: { kycStatus, kycUpdatedAt: new Date() },
       });
       this.logger.log(
-        `[KYC WEBHOOK] ✅ Updated user ${userId} → kycStatus: ${updatedUser.kycStatus}`,
+        `[KYC WEBHOOK] âœ… Updated user ${userId} â†’ kycStatus: ${updatedUser.kycStatus}`,
       );
+
+      await this.auditLogService.createOrThrow({
+        userId,
+        action: AuditAction.KYC_STATUS_UPDATED,
+        resourceType: 'User',
+        resourceId: userId,
+        result: AuditResult.SUCCESS,
+        metadata: { previousStatus, newStatus: updatedUser.kycStatus },
+      });
     } catch (error) {
       const err = error as Error;
       this.logger.error(
-        `[KYC WEBHOOK] ❌ Failed to update user ${userId}: ${err.message}`,
+        `[KYC WEBHOOK] âŒ Failed to update user ${userId}: ${err.message}`,
       );
+
+      await this.auditLogService.createOrThrow({
+        userId,
+        action: AuditAction.KYC_STATUS_UPDATED,
+        resourceType: 'User',
+        resourceId: userId,
+        result: AuditResult.FAILURE,
+        metadata: { previousStatus, attemptedStatus: kycStatus },
+      });
     }
   }
 }

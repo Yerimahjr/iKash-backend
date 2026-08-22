@@ -1,3 +1,14 @@
+/**
+ * DEPRECATED — do not use.
+ *
+ * This manual script has been superseded by test/escrow.e2e-spec.ts,
+ * an automated Jest e2e suite covering the same open -> fund ->
+ * fiat_sent -> release flow with real assertions, run in CI via
+ * pnpm test:e2e.
+ *
+ * This file is kept only as a historical/manual reference. It is not
+ * picked up by Jest and does not run in CI. See #75 for context.
+ */
 const fs = require('fs');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
@@ -224,3 +235,4 @@ async function main() {
 }
 
 main();
+

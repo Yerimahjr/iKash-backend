@@ -67,7 +67,10 @@ export class StatsService {
     while (cursor <= now) {
       const dateStr = this.formatDate(cursor);
 
-      if (dataIdx < dailyCounts.length && dailyCounts[dataIdx].date === dateStr) {
+      if (
+        dataIdx < dailyCounts.length &&
+        dailyCounts[dataIdx].date === dateStr
+      ) {
         runningTotal += Number(dailyCounts[dataIdx].count);
         dataIdx++;
       }

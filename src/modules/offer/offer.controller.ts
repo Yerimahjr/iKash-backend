@@ -8,11 +8,14 @@ import {
   Post,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
+import { AppException, ErrorCode } from '../../common/errors';
 import { PaginationDto } from '../../common/pagination.dto';
 import { CreateOfferDto } from './dto/create-offer.dto';
 import { UpdateOfferDto } from './dto/update-offer.dto';
-import { OfferService } from './offer.service';
+import { OfferService, type OfferFilter } from './offer.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { KycVerifiedGuard } from '../../common/kyc-verified.guard';
 
@@ -22,12 +25,21 @@ export class OfferController {
 
   @Post()
   @UseGuards(JwtAuthGuard, KycVerifiedGuard)
-  create(@Body() dto: CreateOfferDto) {
+  create(
+    @Body() dto: CreateOfferDto,
+    @Req() req: Request & { user: { userId: string } },
+  ) {
+    if (dto.creatorId !== req.user.userId) {
+      throw new AppException(
+        ErrorCode.UNAUTHORIZED_ACTION,
+        'You can only create offers for yourself',
+      );
+    }
     return this.service.create(dto);
   }
 
   @Get()
-  list(@Query() p: PaginationDto, @Query() q: any) {
+  list(@Query() p: PaginationDto, @Query() q: OfferFilter) {
     return this.service.list(p, q);
   }
 

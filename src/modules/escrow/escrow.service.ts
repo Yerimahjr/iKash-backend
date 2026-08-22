@@ -41,6 +41,8 @@ import {
   FileStorageService,
   UploadFileInput,
 } from '../file-storage/file-storage.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction, AuditResult } from '../audit-log/enums/audit-action.enum';
 
 @Injectable()
 export class EscrowService {
@@ -51,7 +53,16 @@ export class EscrowService {
     private readonly tw: TrustlessWorkService,
     private readonly config: ConfigService,
     private readonly fileStorage: FileStorageService,
+    private readonly auditLogService: AuditLogService,
   ) {}
+
+  /**
+   * Helper method to query on-chain balance for a given escrow contract address.
+   * Encapsulates TrustlessWorkService calls to maintain separation of concerns.
+   */
+  async getOnChainEscrowBalance(contractId: string) {
+    return this.tw.getEscrowBalance(contractId);
+  }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -239,6 +250,7 @@ export class EscrowService {
       await this.deployEscrowToChain(dto.orderId, dto);
 
     let escrow = existing;
+    const isNewEscrow = !escrow;
     if (!escrow) {
       escrow = (await this.repo.create({
         orderId: dto.orderId,
@@ -252,6 +264,16 @@ export class EscrowService {
       contractId,
       escrowStatus: 'initialized',
     });
+
+    if (isNewEscrow) {
+      await this.auditLogService.create({
+        action: AuditAction.ESCROW_CREATED,
+        resourceType: 'Escrow',
+        resourceId: escrow.escrowId,
+        result: AuditResult.SUCCESS,
+        metadata: { orderId: dto.orderId, contractId },
+      });
+    }
 
     return {
       escrowId: escrow.escrowId,
@@ -293,8 +315,8 @@ export class EscrowService {
     };
 
     const result = await this.tw.initializeEscrow(payload);
-
     let escrow = await this.repo.findByOrder(dto.orderId);
+    const isNewEscrow = !escrow;
     if (!escrow) {
       escrow = (await this.repo.create({
         orderId: dto.orderId,
@@ -311,6 +333,15 @@ export class EscrowService {
       });
     }
 
+    if (isNewEscrow) {
+      await this.auditLogService.create({
+        action: AuditAction.ESCROW_CREATED,
+        resourceType: 'Escrow',
+        resourceId: escrow.escrowId,
+        result: AuditResult.SUCCESS,
+        metadata: { orderId: dto.orderId },
+      });
+    }
     return {
       escrowId: escrow?.escrowId,
       unsignedTransaction: result.unsignedTransaction,
@@ -484,7 +515,6 @@ export class EscrowService {
     }
 
     const updateData: Record<string, unknown> = {};
-
     switch (dto.action) {
       case EscrowAction.INITIALIZE:
         updateData.escrowStatus = 'initialized';
@@ -502,8 +532,28 @@ export class EscrowService {
         updateData.txHashRelease = dto.signedXdr.substring(0, 64);
         break;
     }
-
     await this.repo.update(dto.escrowId, updateData);
+
+    if (dto.action === EscrowAction.FUND) {
+      await this.auditLogService.create({
+        action: AuditAction.ESCROW_FUNDED,
+        resourceType: 'Escrow',
+        resourceId: dto.escrowId,
+        result: AuditResult.SUCCESS,
+        metadata: { contractId: result.contractId ?? escrow.contractId },
+      });
+    } else if (dto.action === EscrowAction.RELEASE) {
+      await this.auditLogService.create({
+        action: AuditAction.ESCROW_RELEASED,
+        resourceType: 'Escrow',
+        resourceId: dto.escrowId,
+        result: AuditResult.SUCCESS,
+        metadata: {
+          contractId: result.contractId ?? escrow.contractId,
+          txHashRelease: updateData.txHashRelease,
+        },
+      });
+    }
 
     return {
       escrowId: dto.escrowId,

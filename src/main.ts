@@ -1,11 +1,14 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/errors';
 import 'dotenv/config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   app.useGlobalFilters(new HttpExceptionFilter());
 
@@ -28,6 +31,16 @@ async function bootstrap() {
     ],
     credentials: true,
   });
+
+  // Configure proxy trust for rate-limiting client IP extraction
+  const trustProxy = process.env.TRUST_PROXY || '1';
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set(
+      'trust proxy',
+      isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy),
+    );
 
   // 👇 CORRECCIÓN AQUÍ: Agrega '0.0.0.0' como segundo parámetro
   const port = process.env.PORT ?? 3001;

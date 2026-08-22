@@ -1,12 +1,24 @@
-import { IsString, IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreatePaymentMethodDto {
   @IsUUID()
   userId: string;
 
-  @IsString()
-  bankName: string;
+  @IsUUID()
+  providerId: string;
 
   @IsString()
-  accountDetails: string;
+  accountIdentifier: string;
+
+  @IsOptional()
+  @IsString()
+  identificationNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  beneficiaryName?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
 }

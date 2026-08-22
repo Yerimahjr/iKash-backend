@@ -19,7 +19,6 @@ export function errorCodeToHttpStatus(code: ErrorCode): HttpStatus {
   const map: Partial<Record<ErrorCode, HttpStatus>> = {
     // ── 400 Bad Request ──────────────────────────────────────────────
     [ErrorCode.INVALID_WALLET]: HttpStatus.BAD_REQUEST,
-    [ErrorCode.MISSING_PUBLIC_KEY]: HttpStatus.BAD_REQUEST,
     [ErrorCode.INVALID_EMAIL]: HttpStatus.BAD_REQUEST,
     [ErrorCode.MISSING_EMAIL]: HttpStatus.BAD_REQUEST,
     [ErrorCode.MISSING_USER_ID]: HttpStatus.BAD_REQUEST,
@@ -36,15 +35,22 @@ export function errorCodeToHttpStatus(code: ErrorCode): HttpStatus {
     [ErrorCode.MISSING_ASSET_ISSUER]: HttpStatus.BAD_REQUEST,
     [ErrorCode.VALIDATION_ERROR]: HttpStatus.BAD_REQUEST,
     [ErrorCode.MISSING_PAYMENT_PROVIDER]: HttpStatus.BAD_REQUEST,
+    [ErrorCode.INVALID_ACCOUNT_IDENTIFIER]: HttpStatus.BAD_REQUEST,
     [ErrorCode.SELF_SEND]: HttpStatus.BAD_REQUEST,
     [ErrorCode.AMOUNT_TOO_SMALL]: HttpStatus.BAD_REQUEST,
     [ErrorCode.MISSING_FEE_COLLECTOR]: HttpStatus.BAD_REQUEST,
 
     // ── 409 Conflict ──────────────────────────────────────────────────
     [ErrorCode.ALIAS_TAKEN]: HttpStatus.CONFLICT,
+    [ErrorCode.ORDER_CANCELLATION_NOT_ALLOWED]: HttpStatus.CONFLICT,
 
     // ── 401 Unauthorized ─────────────────────────────────────────────
     [ErrorCode.KYC_WEBHOOK_INVALID_SIGNATURE]: HttpStatus.UNAUTHORIZED,
+    [ErrorCode.INVALID_CHALLENGE]: HttpStatus.UNAUTHORIZED,
+    [ErrorCode.INVALID_SIGNATURE]: HttpStatus.UNAUTHORIZED,
+
+    // ── 429 Too Many Requests ─────────────────────────────────────────
+    [ErrorCode.TOO_MANY_REQUESTS]: HttpStatus.TOO_MANY_REQUESTS,
 
     // ── 403 Forbidden ─────────────────────────────────────────────────
     [ErrorCode.UNAUTHORIZED_ACTION]: HttpStatus.FORBIDDEN,

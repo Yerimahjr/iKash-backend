@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { AppException, ErrorCode } from '../../common/errors';
 
 interface JwtPayload {
   sub: string;
@@ -9,7 +11,7 @@ interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -17,7 +19,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: JwtPayload): { userId: string; publicKey: string } {
-    return { userId: payload.sub, publicKey: payload.publicKey };
+  async validate(
+    payload: JwtPayload,
+  ): Promise<{ userId: string; publicKey: string }> {
+    let userId = payload.sub;
+
+    // Fallback for legacy tokens where sub was the wallet address
+    if (userId.startsWith('G') && userId.length === 56) {
+      const user = await this.prisma.appUser.findUnique({
+        where: { publicKey: userId },
+      });
+      if (user) {
+        userId = user.userId;
+      } else {
+        throw new AppException(ErrorCode.USER_NOT_FOUND, 'User not found');
+      }
+    }
+
+    return { userId, publicKey: payload.publicKey };
   }
 }

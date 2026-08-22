@@ -14,6 +14,8 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { rateLimitConfig } from '../../config/rate-limit.config';
 import { PaginationDto } from '../../common/pagination.dto';
 import type { AuthenticatedRequest } from '../../lib/types/auth';
 import { CreateUserDto } from './dto/create-users.dto';
@@ -35,6 +37,7 @@ export class UsersController {
     return this.service.getOrCreateAccount(publicKey);
   }
 
+  @Throttle({ default: rateLimitConfig.registration })
   @Post('early-register')
   earlyRegister(@Body('email') email: string) {
     return this.service.earlyRegister(email);
@@ -53,6 +56,7 @@ export class UsersController {
    *
    * @see docs/entrypoint-dto-validations.md for the full scenario matrix.
    */
+  @Throttle({ default: rateLimitConfig.alias })
   @UseGuards(JwtAuthGuard)
   @Get('validate-alias')
   checkAlias(@Query() query: ValidateAliasDto) {

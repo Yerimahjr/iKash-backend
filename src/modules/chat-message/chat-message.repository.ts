@@ -16,4 +16,11 @@ export class ChatMessageRepository extends BaseRepository {
       orderBy: { timestamp: 'asc' },
     });
   }
+
+  findOrderParticipants(orderId: string) {
+    return this.prisma.order.findUnique({
+      where: { orderId },
+      select: { buyerId: true, sellerId: true },
+    });
+  }
 }

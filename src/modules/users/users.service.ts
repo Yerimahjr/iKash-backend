@@ -13,6 +13,7 @@ import {
 } from '../file-storage/file-storage.service';
 import { AppException, ErrorCode } from '../../common/errors';
 import { AppUser, Waitlist } from '@prisma/client';
+import { PaymentMethodValidatorService } from '../payment-methods/payment-method-validator.service';
 
 export interface AliasAvailability {
   available: boolean;
@@ -35,6 +36,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly authService: AuthService,
     private readonly fileStorageService: FileStorageService,
+    private readonly paymentMethodValidator: PaymentMethodValidatorService,
   ) {}
 
   async getOrCreateAccount(publicKey: string): Promise<AppUser> {
@@ -99,6 +101,16 @@ export class UsersService {
           'Payment provider not found',
         );
       }
+
+      this.paymentMethodValidator.validate(
+        {
+          type: provider.type,
+          countryCode: provider.country_code,
+          code: (provider.metadata as { code?: string } | null | undefined)
+            ?.code,
+        },
+        accountIdentifier,
+      );
 
       await this.prisma.paymentMethod.create({
         data: {

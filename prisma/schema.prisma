@@ -14,6 +14,7 @@ model AppUser {
   alias                String?          @unique @map("alias")
   username             String?          @map("username")
   kycStatus            kyc_status       @default(pending) @map("kyc_status")
+  role                 app_role         @default(USER) @map("role")
   kycUpdatedAt         DateTime?        @map("kyc_updated_at") @db.Timestamptz(6)
   totalVolume          Decimal          @default(0) @map("total_volume") @db.Decimal(20, 7)
   createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -30,6 +31,7 @@ model AppUser {
   buyOrders            Order[]         @relation("BuyerOrders")
   sellOrders           Order[]         @relation("SellerOrders")
   paymentMethods       PaymentMethod[]
+  auditLogs            AuditLog[]
 
   @@map("app_user")
 }
@@ -190,10 +192,51 @@ enum payment_provider_type {
   BANK
 }
 
+/// Immutable audit trail for critical security-relevant actions across the
+/// platform (auth, payments, offers/orders, escrow, disputes, KYC, admin
+/// actions). Never updated or deleted through normal application flows â€”
+/// see AuditLogService for the only supported write path.
+model AuditLog {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  action        String   @map("action")
+  resourceType  String   @map("resource_type")
+  resourceId    String?  @map("resource_id")
+  result        String   @map("result")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  correlationId String?  @map("correlation_id")
+  metadata      Json?    @map("metadata")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user          AppUser? @relation(fields: [userId], references: [userId], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([userId, createdAt], map: "idx_audit_log_user_id_created_at")
+  @@index([resourceType, resourceId], map: "idx_audit_log_resource_type_resource_id")
+  @@index([action, createdAt], map: "idx_audit_log_action_created_at")
+  @@map("audit_log")
+}
+
+model AuthChallenge {
+  challengeId String    @id @default(dbgenerated("gen_random_uuid()")) @map("challenge_id") @db.Uuid
+  publicKey   String    @unique @map("public_key")
+  challenge   String
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("auth_challenge")
+}
 model Waitlist {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email     String   @unique
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("waitlist")
+}
+
+
+enum app_role {
+  USER
+  ADMIN
 }

@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -22,6 +23,10 @@ import { FiatSentDto } from './dto/fiat-sent.dto';
 import { ReleaseEscrowDto } from './dto/release-escrow.dto';
 import { SyncEscrowDto } from './dto/sync-escrow.dto';
 import { EscrowService } from './escrow.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ResourceOwnerGuard } from '../../common/guards/resource-owner.guard';
+import { ResourceOwner } from '../../common/decorators/resource-owner.decorator';
+import { ResourceType } from '../../common/interfaces/resource-owner.interface';
 
 @Controller('escrows')
 export class EscrowController {
@@ -65,12 +70,16 @@ export class EscrowController {
 
   /** Mark that the buyer has sent fiat payment */
   @Post(':id/fiat-sent')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   markFiatSent(@Param('id') id: string, @Body() dto: FiatSentDto) {
     return this.service.markFiatSent(id, dto);
   }
 
   /** Upload evidence file (receipt) for an escrow */
   @Post(':id/evidence')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
   )
@@ -83,6 +92,8 @@ export class EscrowController {
 
   /** Get escrow status with live on-chain data */
   @Get(':id/status')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   getStatus(@Param('id') id: string) {
     return this.service.getStatus(id);
   }
@@ -100,16 +111,22 @@ export class EscrowController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   get(@Param('id') id: string) {
     return this.service.get(id);
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   update(@Param('id') id: string, @Body() dto: UpdateEscrowDto) {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.ESCROW)
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }

@@ -7,11 +7,16 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { PaginationDto } from '../../common/pagination.dto';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { PaymentMethodsService } from './payment-methods.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ResourceOwnerGuard } from '../../common/guards/resource-owner.guard';
+import { ResourceOwner } from '../../common/decorators/resource-owner.decorator';
+import { ResourceType } from '../../common/interfaces/resource-owner.interface';
 
 @Controller('payment-methods')
 export class PaymentMethodsController {
@@ -28,16 +33,22 @@ export class PaymentMethodsController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.PAYMENT_METHOD)
   get(@Param('id') id: string) {
     return this.service.get(id);
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.PAYMENT_METHOD)
   update(@Param('id') id: string, @Body() dto: UpdatePaymentMethodDto) {
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, ResourceOwnerGuard)
+  @ResourceOwner(ResourceType.PAYMENT_METHOD)
   remove(@Param('id') id: string) {
     return this.service.remove(id);
   }

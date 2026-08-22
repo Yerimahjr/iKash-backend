@@ -15,6 +15,15 @@ export class ChatMessageService {
     ) as Promise<ChatMessage>;
   }
 
+  async canAccessOrder(
+    orderId: string,
+    userId: string,
+  ): Promise<boolean | null> {
+    const order = await this.repo.findOrderParticipants(orderId);
+    if (!order) return null;
+    return order.buyerId === userId || order.sellerId === userId;
+  }
+
   list(p: PaginationDto, orderId?: string): Promise<ChatMessage[]> {
     if (orderId) return this.repo.findByOrder(orderId, p.skip, p.take ?? 50);
     return this.repo.findMany({
